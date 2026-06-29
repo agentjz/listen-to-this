@@ -36,6 +36,14 @@
   line-height: 42rpx;
 }
 
+.cloud-symbol {
+  height: 40rpx;
+  color: #0284c7;
+  font-size: 40rpx;
+  font-weight: 700;
+  line-height: 40rpx;
+}
+
 .entry-meta {
   color: #667085;
   font-size: 24rpx;

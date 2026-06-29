@@ -18,7 +18,7 @@
       <text class="entry-meta">{{localMaterialCount}} 个材料</text>
     </view>
     <view class="entry-card" bindtap="goCloudResources">
-      <van-icon name="cloud-o" />
+      <text class="cloud-symbol">☁</text>
       <text class="entry-title">云端资源</text>
       <text class="entry-meta">{{cloudAvailable ? cloudLibraryCount + ' 个资料库' : '云不可用'}}</text>
     </view>
