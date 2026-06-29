@@ -2,9 +2,10 @@ import { UNFILED_LIBRARY_ID } from '../../miniprogram/lib/libraries';
 import { loadSnapshotByMode, moveMaterialByMode, syncCloudData } from '../../miniprogram/services/runtimeData';
 import { Material, SourceLibrary } from '../../miniprogram/types/domain';
 import { DataMode, parseDataMode } from '../../miniprogram/types/runtime';
+import { selectAll, toggleSelection } from '../../miniprogram/lib/selection';
 
 interface CandidateMaterial extends Material {
-  isMoving: boolean;
+  isSelected: boolean;
 }
 
 interface ImportExistingData {
@@ -12,12 +13,19 @@ interface ImportExistingData {
   targetLibraryId: string;
   targetLibraryName: string;
   candidates: CandidateMaterial[];
+  selectedMaterialIds: string[];
+  selectedCount: number;
   isLoading: boolean;
+  isBatchMoving: boolean;
 }
 
 Page<ImportExistingData, {
   load: () => Promise<void>;
-  importMaterial: (event: { currentTarget: { dataset: { id: string } } }) => Promise<void>;
+  toggleCandidateSelection: (event: { currentTarget: { dataset: { id: string } } }) => void;
+  selectAllCandidates: () => void;
+  clearSelection: () => void;
+  importSelectedMaterials: () => Promise<void>;
+  refreshSelection: (selectedMaterialIds: string[]) => void;
   sortMaterials: (materials: Material[]) => Material[];
   resolveTargetLibrary: (libraries: SourceLibrary[]) => SourceLibrary;
 }>({
@@ -26,7 +34,10 @@ Page<ImportExistingData, {
     targetLibraryId: '',
     targetLibraryName: '',
     candidates: [],
-    isLoading: true
+    selectedMaterialIds: [],
+    selectedCount: 0,
+    isLoading: true,
+    isBatchMoving: false
   },
 
   async onLoad(query) {
@@ -45,12 +56,19 @@ Page<ImportExistingData, {
         snapshot.data.materials.filter((material) => material.libraryId === UNFILED_LIBRARY_ID && material.status !== 'archived')
       ).map((material) => ({
         ...material,
-        isMoving: false
+        isSelected: this.data.selectedMaterialIds.includes(material.id)
       }));
+      const candidateIds = new Set(candidates.map((material) => material.id));
+      const selectedMaterialIds = this.data.selectedMaterialIds.filter((id) => candidateIds.has(id));
 
       this.setData({
         targetLibraryName: targetLibrary.name,
-        candidates,
+        candidates: candidates.map((material) => ({
+          ...material,
+          isSelected: selectedMaterialIds.includes(material.id)
+        })),
+        selectedMaterialIds,
+        selectedCount: selectedMaterialIds.length,
         isLoading: false
       });
     } catch (error) {
@@ -86,27 +104,73 @@ Page<ImportExistingData, {
     });
   },
 
-  async importMaterial(event) {
-    const materialId = event.currentTarget.dataset.id;
-    if (!materialId) {
+  toggleCandidateSelection(event) {
+    if (this.data.isBatchMoving) {
+      return;
+    }
+
+    this.refreshSelection(toggleSelection(this.data.selectedMaterialIds, event.currentTarget.dataset.id));
+  },
+
+  selectAllCandidates() {
+    if (this.data.isBatchMoving) {
+      return;
+    }
+
+    this.refreshSelection(selectAll(this.data.candidates.map((material) => material.id)));
+  },
+
+  clearSelection() {
+    if (this.data.isBatchMoving) {
+      return;
+    }
+
+    this.refreshSelection([]);
+  },
+
+  refreshSelection(selectedMaterialIds) {
+    this.setData({
+      selectedMaterialIds,
+      selectedCount: selectedMaterialIds.length,
+      candidates: this.data.candidates.map((material) => ({
+        ...material,
+        isSelected: selectedMaterialIds.includes(material.id)
+      }))
+    });
+  },
+
+  async importSelectedMaterials() {
+    if (this.data.isBatchMoving) {
+      return;
+    }
+
+    if (this.data.selectedMaterialIds.length === 0) {
+      wx.showToast({ title: '请选择材料', icon: 'none' });
       return;
     }
 
     try {
       this.setData({
+        isBatchMoving: true,
         candidates: this.data.candidates.map((material) => ({
           ...material,
-          isMoving: material.id === materialId
+          isSelected: this.data.selectedMaterialIds.includes(material.id)
         }))
       });
-      await moveMaterialByMode(this.data.mode, materialId, this.data.targetLibraryId);
+
+      for (const materialId of this.data.selectedMaterialIds) {
+        await moveMaterialByMode(this.data.mode, materialId, this.data.targetLibraryId);
+      }
+
       if (this.data.mode === 'cloud') {
         await syncCloudData();
       }
+
       wx.showToast({ title: '已导入', icon: 'success' });
       wx.redirectTo({ url: `/pages/materials/materials?mode=${this.data.mode}&libraryId=${this.data.targetLibraryId}` });
     } catch (error) {
-      wx.showToast({ title: error instanceof Error ? error.message : '导入失败', icon: 'none' });
+      wx.showToast({ title: error instanceof Error ? error.message : '批量导入失败', icon: 'none' });
+      this.setData({ isBatchMoving: false });
       await this.load();
     }
   }

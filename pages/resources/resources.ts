@@ -182,6 +182,10 @@ Page<ResourcesData, {
   },
 
   async saveRename() {
+    if (this.data.isRenaming) {
+      return;
+    }
+
     try {
       this.setData?.({ isRenaming: true });
       await renameLibraryByMode(this.data.mode, this.data.editingLibraryId, this.data.editingLibraryName);

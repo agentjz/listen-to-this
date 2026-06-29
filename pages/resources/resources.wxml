@@ -58,8 +58,10 @@
           placeholder-class="input-placeholder"
         />
         <view class="rename-actions">
-          <van-button color="#38bdf8" size="small" loading="{{isRenaming}}" bindtap="saveRename">保存</van-button>
-          <van-button plain color="#667085" size="small" bindtap="cancelRename">取消</van-button>
+          <view class="{{isRenaming ? 'rename-command primary busy' : 'rename-command primary'}}" bindtap="saveRename">
+            {{isRenaming ? '保存中' : '保存'}}
+          </view>
+          <view class="rename-command muted" bindtap="cancelRename">取消</view>
         </view>
       </view>
       <view wx:else class="resource-main" data-id="{{item.id}}" bindtap="openMaterials">
@@ -74,7 +76,7 @@
           <van-icon name="delete-o" />
         </view>
       </view>
-      <van-icon wx:else name="arrow" />
+      <van-icon wx:if="{{!isManaging && editingLibraryId !== item.id}}" name="arrow" />
     </view>
   </view>
 </view>

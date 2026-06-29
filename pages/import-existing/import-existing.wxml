@@ -11,15 +11,33 @@
     <view class="empty-copy">先新建材料，再回到分类中导入。</view>
   </view>
 
-  <view wx:else class="candidate-list">
-    <view wx:for="{{candidates}}" wx:key="id" class="candidate-row">
-      <view class="candidate-main">
-        <view class="candidate-title">{{item.title}}</view>
-        <view class="candidate-copy">{{item.content}}</view>
+  <view wx:else class="candidate-section">
+    <view class="batch-toolbar">
+      <view class="batch-count">已选择 {{selectedCount}} 个</view>
+      <view class="batch-actions">
+        <view class="batch-action" bindtap="selectAllCandidates">全选</view>
+        <view class="batch-action" bindtap="clearSelection">取消</view>
       </view>
-      <view class="candidate-action" data-id="{{item.id}}" bindtap="importMaterial">
-        {{item.isMoving ? '导入中' : '导入'}}
+    </view>
+
+    <view class="candidate-list">
+      <view
+        wx:for="{{candidates}}"
+        wx:key="id"
+        class="{{item.isSelected ? 'candidate-row selected' : 'candidate-row'}}"
+        data-id="{{item.id}}"
+        bindtap="toggleCandidateSelection"
+      >
+        <view class="candidate-check" data-id="{{item.id}}" catchtap="toggleCandidateSelection">{{item.isSelected ? '✓' : ''}}</view>
+        <view class="candidate-main">
+          <view class="candidate-title">{{item.title}}</view>
+          <view class="candidate-copy">{{item.content}}</view>
+        </view>
       </view>
+    </view>
+
+    <view class="{{isBatchMoving ? 'batch-submit moving' : 'batch-submit'}}" bindtap="importSelectedMaterials">
+      {{isBatchMoving ? '导入中' : '导入已选'}}
     </view>
   </view>
 </view>
