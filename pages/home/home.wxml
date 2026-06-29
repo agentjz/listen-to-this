@@ -1,0 +1,31 @@
+<view class="page home-page">
+  <view class="section hero">
+    <view>
+      <view class="title">每日英语听写</view>
+      <view class="subtitle">选择材料开始听，或者导入新的英文内容。</view>
+    </view>
+  </view>
+
+  <view class="section action-grid">
+    <view class="entry-card" bindtap="goLocalResources">
+      <van-icon name="cluster-o" />
+      <text class="entry-title">本地资源</text>
+      <text class="entry-meta">{{localLibraryCount}} 个资料库</text>
+    </view>
+    <view class="entry-card" bindtap="goLocalImport">
+      <van-icon name="records-o" />
+      <text class="entry-title">本地导入</text>
+      <text class="entry-meta">{{localMaterialCount}} 个材料</text>
+    </view>
+    <view class="entry-card" bindtap="goCloudResources">
+      <van-icon name="cloud-o" />
+      <text class="entry-title">云端资源</text>
+      <text class="entry-meta">{{cloudAvailable ? cloudLibraryCount + ' 个资料库' : '云不可用'}}</text>
+    </view>
+    <view class="entry-card" bindtap="goCloudImport">
+      <van-icon name="upgrade" />
+      <text class="entry-title">云端导入</text>
+      <text class="entry-meta">{{cloudAvailable ? cloudMaterialCount + ' 个材料' : '云不可用'}}</text>
+    </view>
+  </view>
+</view>

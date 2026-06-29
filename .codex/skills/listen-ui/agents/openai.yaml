@@ -1,0 +1,4 @@
+interface:
+  display_name: "Listen UI"
+  short_description: "维护小程序界面结构、组件语义和样式边界"
+  default_prompt: "Use $listen-ui to revise the Daily English Listening mini program interface with correct component semantics and verified layout."

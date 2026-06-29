@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/resources/resources",
+    "pages/materials/materials",
+    "pages/material-detail/material-detail",
+    "pages/import/import",
+    "pages/admin/admin"
+  ],
+  "window": {
+    "navigationBarTitleText": "每日英语听写",
+    "navigationBarBackgroundColor": "#38bdf8",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f6f7fb"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

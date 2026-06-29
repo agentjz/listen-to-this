@@ -1,12 +1,18 @@
 # Dependencies
 node_modules/
 miniprogram_npm/
+ref/
 
 # Build outputs
 dist/
 build/
 coverage/
 .nyc_output/
+app.js
+pages/**/*.js
+miniprogram/**/*.js
+cloudfunctions/**/*.js
+tests/**/*.js
 
 # Logs
 *.log
@@ -39,6 +45,7 @@ temp/
 # WeChat Mini Program local files
 project.private.config.json
 sitemap*.json
+!sitemap.json
 .miniprogram/
 
 # Generated media and user materials
@@ -48,6 +55,8 @@ exports/
 *.mp3
 *.wav
 *.m4a
+!local-assets/
+!local-assets/**
 
 # Secrets and certificates
 *.pem

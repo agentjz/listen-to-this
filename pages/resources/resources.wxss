@@ -1,0 +1,80 @@
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.head-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.manage-toggle {
+  width: 132rpx;
+  height: 64rpx;
+  flex: none;
+  border-radius: 8rpx;
+  color: #0284c7;
+  background: #e0f2fe;
+  font-size: 26rpx;
+  font-weight: 650;
+  line-height: 64rpx;
+  text-align: center;
+}
+
+.name-input {
+  width: 100%;
+  min-height: 88rpx;
+  padding: 18rpx 22rpx;
+  border: 1rpx solid #bae6fd;
+  border-radius: 8rpx;
+  color: #172033;
+  background: #ffffff;
+  font-size: 28rpx;
+  line-height: 44rpx;
+}
+
+.resource-row {
+  display: flex;
+  min-height: 128rpx;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 26rpx;
+  border: 1rpx solid #e3e7f3;
+  border-radius: 8rpx;
+  background: #ffffff;
+  text-align: left;
+}
+
+.resource-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.resource-name {
+  color: #172033;
+  font-size: 30rpx;
+  font-weight: 650;
+  line-height: 40rpx;
+}
+
+.resource-meta {
+  margin-top: 6rpx;
+  color: #667085;
+  font-size: 24rpx;
+  line-height: 34rpx;
+}
+
+.resource-delete {
+  width: 64rpx;
+  height: 64rpx;
+  flex: none;
+  border-radius: 8rpx;
+  color: #b42318;
+  background: #fff1f1;
+  font-size: 32rpx;
+  line-height: 64rpx;
+  text-align: center;
+}

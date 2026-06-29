@@ -1,0 +1,24 @@
+{
+  "name": "daily-english-listening",
+  "version": "1.0.0",
+  "private": true,
+  "description": "每日英语听写微信小程序与 CloudBase 工程",
+  "license": "MIT",
+  "scripts": {
+    "generate:local-assets": "node scripts/generate-local-assets.js",
+    "build": "npm.cmd run generate:local-assets && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check:boundaries": "node scripts/check-boundaries.js",
+    "check:local-assets": "node scripts/check-local-assets.js",
+    "verify": "npm.cmd run generate:local-assets && npm.cmd run typecheck && npm.cmd test && npm.cmd run check:boundaries && npm.cmd run check:local-assets"
+  },
+  "dependencies": {
+    "@vant/weapp": "^1.11.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}

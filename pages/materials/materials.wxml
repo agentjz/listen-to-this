@@ -1,0 +1,52 @@
+<view class="page materials-page">
+  <view class="section page-head">
+    <view class="head-copy">
+      <view class="title">材料</view>
+      <view class="subtitle">点标题看原文，有音频就直接播放。</view>
+    </view>
+    <view class="manage-toggle" bindtap="toggleManage">{{isManaging ? '完成' : '管理'}}</view>
+  </view>
+
+  <view wx:if="{{isManaging}}" class="section manage-panel">
+    <view class="import-action" bindtap="goImport">导入材料</view>
+  </view>
+
+  <view wx:if="{{debugLines.length}}" class="section debug-panel">
+    <view class="debug-title">播放调试</view>
+    <view wx:for="{{debugLines}}" wx:key="*this" class="debug-line">{{item}}</view>
+  </view>
+
+  <view class="material-list">
+    <view
+      wx:for="{{materials}}"
+      wx:for-index="index"
+      wx:key="id"
+      class="{{item.isDragging ? 'material-card dragging' : 'material-card'}}"
+      data-id="{{item.id}}"
+      data-index="{{index}}"
+      bindlongpress="onDragStart"
+      bindtouchmove="onDragMove"
+      bindtouchend="onDragEnd"
+      bindtouchcancel="onDragEnd"
+    >
+      <view class="material-body" data-id="{{item.id}}" bindtap="openDetail">
+        <view class="material-title">{{item.title}}</view>
+        <view class="material-desc">{{item.audioCount > 0 ? item.audioCount + ' 段音频' : '阅读材料'}}</view>
+      </view>
+      <view class="material-footer">
+        <view class="footer-action play" data-id="{{item.id}}" bindtap="playMaterial">
+          <van-icon name="{{playingMaterialId === item.id ? 'pause-circle-o' : 'play-circle-o'}}" />
+          <text>{{playingMaterialId === item.id ? '暂停' : (pausedMaterialId === item.id ? '继续' : '播放')}}</text>
+        </view>
+        <view class="footer-action restart" data-id="{{item.id}}" bindtap="restartMaterial">
+          <van-icon name="replay" />
+          <text>从头</text>
+        </view>
+      </view>
+      <view wx:if="{{isManaging}}" class="manage-actions">
+        <view class="manage-action" data-id="{{item.id}}" bindtap="moveMaterial">移动</view>
+        <view class="manage-action danger" data-id="{{item.id}}" bindtap="deleteMaterial">删除</view>
+      </view>
+    </view>
+  </view>
+</view>

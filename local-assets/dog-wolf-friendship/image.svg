@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#e0f2fe"/>
+  <rect x="0" y="500" width="1200" height="220" fill="#d7ead4"/>
+  <circle cx="950" cy="150" r="72" fill="#f8d86a"/>
+  <path d="M120 500 C240 360 350 340 470 500 Z" fill="#9aa9c7"/>
+  <path d="M360 500 C500 300 690 300 840 500 Z" fill="#7f8fb2"/>
+  <g transform="translate(250 365)">
+    <path d="M65 145 C50 105 65 58 112 42 C160 26 214 52 237 91 C265 138 235 190 170 198 C118 204 82 184 65 145 Z" fill="#53627a"/>
+    <path d="M105 54 L80 6 L132 34 Z" fill="#53627a"/>
+    <path d="M195 75 L235 28 L228 96 Z" fill="#53627a"/>
+    <circle cx="127" cy="95" r="10" fill="#172033"/>
+    <path d="M154 116 L185 116 L168 132 Z" fill="#172033"/>
+    <path d="M80 196 L70 270 M135 200 L128 270 M205 195 L226 270" stroke="#53627a" stroke-width="18" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(690 395)">
+    <path d="M70 125 C58 84 83 45 130 38 C178 31 224 60 238 105 C255 158 216 196 158 194 C111 192 82 168 70 125 Z" fill="#b98252"/>
+    <path d="M111 46 L96 8 L145 38 Z" fill="#b98252"/>
+    <path d="M206 78 L250 62 L228 108 Z" fill="#b98252"/>
+    <circle cx="142" cy="90" r="9" fill="#172033"/>
+    <path d="M168 112 L195 112 L181 128 Z" fill="#172033"/>
+    <path d="M90 190 L84 260 M142 194 L140 262 M212 184 L230 252" stroke="#b98252" stroke-width="17" stroke-linecap="round"/>
+  </g>
+  <text x="600" y="96" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#0284c7">Dogs And Wolves</text>
+  <text x="600" y="148" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#475467">A local listening sample</text>
+</svg>

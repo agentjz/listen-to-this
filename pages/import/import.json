@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "导入",
+  "usingComponents": {
+    "van-button": "@vant/weapp/button/index"
+  }
+}

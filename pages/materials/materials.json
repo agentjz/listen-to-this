@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "材料",
+  "usingComponents": {
+    "van-icon": "@vant/weapp/icon/index"
+  }
+}

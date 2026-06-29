@@ -1,0 +1,33 @@
+<view class="page">
+  <view class="section page-head">
+    <view class="head-copy">
+      <view class="title">资源</view>
+      <view class="subtitle">选择分类，或在管理模式新增分类。</view>
+    </view>
+    <view class="manage-toggle" bindtap="toggleManage">{{isManaging ? '完成' : '管理'}}</view>
+  </view>
+
+  <view wx:if="{{isManaging}}" class="section panel stack">
+    <input
+      class="name-input"
+      value="{{newLibraryName}}"
+      bindinput="onLibraryNameInput"
+      placeholder="分类名称"
+      placeholder-class="input-placeholder"
+    />
+    <van-button color="#38bdf8" block loading="{{isSaving}}" bindtap="saveLibrary">新增分类</van-button>
+  </view>
+
+  <view class="stack">
+    <view wx:for="{{resources}}" wx:key="id" class="resource-row">
+      <view class="resource-main" data-id="{{item.id}}" bindtap="openMaterials">
+        <view class="resource-name">{{item.name}}</view>
+        <view class="resource-meta">{{item.materialCount}} 个材料</view>
+      </view>
+      <view wx:if="{{isManaging}}" class="resource-delete" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="deleteLibrary">
+        <van-icon name="delete-o" />
+      </view>
+      <van-icon wx:else name="arrow" />
+    </view>
+  </view>
+</view>

@@ -1,0 +1,50 @@
+<view class="page">
+  <view class="section">
+    <view class="title">导入材料</view>
+    <view class="subtitle">导入文本或阅读材料；有音频就播放，没有音频就阅读。</view>
+  </view>
+
+  <view class="section panel stack">
+    <input
+      class="text-input"
+      value="{{title}}"
+      bindinput="onTitleInput"
+      placeholder="不填则自动命名"
+      placeholder-class="input-placeholder"
+    />
+    <textarea
+      class="content-input"
+      value="{{content}}"
+      bindinput="onContentInput"
+      placeholder="粘贴英文句子、段落或文章"
+      placeholder-class="input-placeholder"
+      auto-height="{{false}}"
+    />
+  </view>
+
+  <view wx:if="{{libraries.length > 1}}" class="section library-list">
+    <view
+      wx:for="{{libraries}}"
+      wx:key="id"
+      class="{{libraryId === item.id ? 'library-choice active' : 'library-choice'}}"
+      data-id="{{item.id}}"
+      bindtap="chooseLibrary"
+    >
+      <text class="library-name">{{item.name}}</text>
+      <van-icon wx:if="{{libraryId === item.id}}" name="success" />
+    </view>
+  </view>
+
+  <view class="section panel audio-picker">
+    <view class="audio-picker-copy">
+      <view class="audio-picker-title">音频</view>
+      <view class="audio-picker-meta">{{audioFileName || '可选，支持 mp3、m4a、wav'}}</view>
+    </view>
+    <view class="audio-picker-actions">
+      <view class="audio-action" bindtap="chooseAudio">{{audioFileName ? '重选' : '选择'}}</view>
+      <view wx:if="{{audioFileName}}" class="audio-action muted" bindtap="clearAudio">清除</view>
+    </view>
+  </view>
+
+  <van-button color="#38bdf8" block loading="{{isSaving}}" bindtap="saveMaterial">保存材料</van-button>
+</view>
