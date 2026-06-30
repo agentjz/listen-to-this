@@ -6,10 +6,22 @@ const assetsRoot = path.join(root, 'local-assets');
 const outputDir = path.join(root, 'miniprogram', 'generated');
 const outputFile = path.join(outputDir, 'localAssets.ts');
 const audioFormats = ['mp3', 'm4a', 'wav'];
-const defaultMetadata = {
-  libraryId: 'public-library',
-  libraryName: '公共资源',
-  libraryKind: 'general'
+const assetSections = {
+  public: {
+    libraryId: 'public-library',
+    libraryName: '公共资源',
+    libraryKind: 'general'
+  },
+  uncategorized: {
+    libraryId: 'uncategorized-library',
+    libraryName: '未分类材料',
+    libraryKind: 'user'
+  },
+  user: {
+    libraryId: 'user-library',
+    libraryName: '用户资源',
+    libraryKind: 'user'
+  }
 };
 
 function titleFromFolderId(folderId) {
@@ -28,42 +40,56 @@ function readMaterials() {
   return fs
     .readdirSync(assetsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const folderId = entry.name;
-      const materialDir = path.join(assetsRoot, folderId);
-      const textPath = path.join(materialDir, 'text.txt');
-      const metadata = readMetadata(materialDir);
-      const content = fs.existsSync(textPath) ? fs.readFileSync(textPath, 'utf8').trim() : '';
-      const audioFormat = audioFormats.find((format) => fs.existsSync(path.join(materialDir, `audio.${format}`)));
-
-      return {
-        id: folderId,
-        title: titleFromFolderId(folderId),
-        libraryId: metadata.libraryId,
-        libraryName: metadata.libraryName,
-        libraryKind: metadata.libraryKind,
-        content,
-        audio: audioFormat
-          ? {
-              format: audioFormat,
-              cloudFileId: `/local-assets/${folderId}/audio.${audioFormat}`
-            }
-          : null,
-      };
-    });
+    .flatMap((sectionEntry) => readSectionMaterials(sectionEntry.name));
 }
 
-function readMetadata(materialDir) {
+function readSectionMaterials(sectionName) {
+  const sectionDefaults = assetSections[sectionName];
+  if (!sectionDefaults) {
+    return [];
+  }
+
+  const sectionDir = path.join(assetsRoot, sectionName);
+  return fs
+    .readdirSync(sectionDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => readMaterial(sectionName, sectionDefaults, entry.name));
+}
+
+function readMaterial(sectionName, sectionDefaults, folderId) {
+  const materialDir = path.join(assetsRoot, sectionName, folderId);
+  const textPath = path.join(materialDir, 'text.txt');
+  const metadata = readMetadata(materialDir, sectionDefaults);
+  const content = fs.existsSync(textPath) ? fs.readFileSync(textPath, 'utf8').trim() : '';
+  const audioFormat = audioFormats.find((format) => fs.existsSync(path.join(materialDir, `audio.${format}`)));
+
+  return {
+    id: `${sectionName}-${folderId}`,
+    title: titleFromFolderId(folderId),
+    libraryId: metadata.libraryId,
+    libraryName: metadata.libraryName,
+    libraryKind: metadata.libraryKind,
+    content,
+    audio: audioFormat
+      ? {
+          format: audioFormat,
+          cloudFileId: `/local-assets/${sectionName}/${folderId}/audio.${audioFormat}`
+        }
+      : null,
+  };
+}
+
+function readMetadata(materialDir, sectionDefaults) {
   const metadataPath = path.join(materialDir, 'metadata.json');
   if (!fs.existsSync(metadataPath)) {
-    return defaultMetadata;
+    return sectionDefaults;
   }
 
   const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
   return {
-    libraryId: metadata.libraryId || defaultMetadata.libraryId,
-    libraryName: metadata.libraryName || defaultMetadata.libraryName,
-    libraryKind: metadata.libraryKind || defaultMetadata.libraryKind
+    libraryId: metadata.libraryId || sectionDefaults.libraryId,
+    libraryName: metadata.libraryName || sectionDefaults.libraryName,
+    libraryKind: metadata.libraryKind || sectionDefaults.libraryKind
   };
 }
 

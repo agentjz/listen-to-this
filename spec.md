@@ -116,7 +116,7 @@
 - 分类新增、重命名、删除并迁移材料、材料移动分类和分类内长按拖拽排序。
 - 全部资源虚拟入口和资源页材料搜索。
 - 首页、资源、材料、原文详情、新建材料、导入已有材料页面。
-- 本地测试样例 `local-assets/dog-wolf-friendship/`。
+- 本地测试样例 `local-assets/public/dog-wolf-friendship/`。
 - 自动测试、类型检查、乱码检查、坏命名检查和页面入口检查。
 
 当前工程不包含：
@@ -163,7 +163,13 @@
 
 `local-assets/` 是仓库级测试样例目录，不是小程序运行时写入目录。用户在小程序里新建的材料不会自动生成或修改 `local-assets/` 文件。
 
-`local-assets/<folder-id>/` 中的 `<folder-id>` 是样例材料唯一标识，并用于派生默认标题。文件夹名使用小写字母、数字和连字符。样例材料文件使用固定通用命名：`text.txt`、`audio.mp3|m4a|wav`。`metadata.json` 只用于样例材料首次初始化分类，不记录用户运行时移动分类结果。
+`local-assets/` 当前固定使用三个顶层分区：
+
+- `public/`：公共资源样例，默认进入公共资源分类，只读。
+- `uncategorized/`：未分类材料样例，默认进入未分类材料。
+- `user/`：用户资源样例，默认进入用户资源分类。
+
+样例材料目录为 `local-assets/<section>/<folder-id>/`。`<section>-<folder-id>` 组成生成材料 ID，`<folder-id>` 用于派生默认标题。文件夹名使用小写字母、数字和连字符。样例材料文件使用固定通用命名：`text.txt`、`audio.mp3|m4a|wav`。`metadata.json` 只用于样例材料首次初始化分类覆盖，不记录用户运行时移动分类结果。
 
 ## 8. 验收标准
 

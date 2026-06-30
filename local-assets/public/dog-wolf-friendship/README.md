@@ -8,7 +8,7 @@
 - `audio.mp3`：材料音频样例。
 - `metadata.json`：样例材料首次初始化分类。
 
-文件夹名 `dog-wolf-friendship` 是材料唯一标识，也会派生默认标题。
+当前材料路径是 `local-assets/public/dog-wolf-friendship/`。分区 `public` 表示公共资源，文件夹名 `dog-wolf-friendship` 用于生成材料 ID 和默认标题。
 
 ## 音频对应关系
 

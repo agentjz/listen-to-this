@@ -1,94 +1,109 @@
-# 播放器稳定实例生命周期 Plan
+﻿# Local Assets 分区存储 Plan
 
 ## 1. 需求文档
 
-当前材料页和听写练习页已经有播放、暂停、继续、从头播放、拖动进度、倍速、单条循环和自动下一条。实际体验仍有问题：暂停后再播放、播放中切换倍速、拖动进度等操作不应该让播放器进入不可预期状态。
+`local-assets` 是仓库级本地样例材料目录。现在所有材料直接放在 `local-assets/<material-id>/`，公共资源、未分类材料、用户材料在文件系统上没有天然边界。这个结构一开始简单，但后续会让公共只读、未分类暂存、用户自建材料混在同一个目录层，维护成本会上升。
 
-本次要把播放器生命周期改成稳定实例模型：当前音频不变时，播放器实例保持存在；暂停、继续、倍速和拖动进度都只是控制同一个实例；只有切换音频、从页面离开或明确停止释放资源时才销毁旧实例。
+本次要把 `local-assets` 从单层材料目录改成明确分区目录：
 
-业务完成标准：用户在同一条音频上暂停、继续、改倍速、拖动进度和从头播放时，状态稳定、位置明确、不会因为销毁重建造成跳点或按钮错乱；切换到另一条音频时才释放旧实例并创建新实例。
+```text
+local-assets/
+  public/
+  uncategorized/
+  user/
+```
+
+每个分区下面再放材料文件夹。用户看到的业务含义是：公共资源只读；未分类材料作为默认暂存分类；用户材料是可编辑、可删除、可移动的个人材料。文件系统从一开始就表达这个边界。
+
+业务完成标准：本地样例材料能放进对应分区；构建脚本从分区目录扫描并生成小程序材料；校验脚本能拒绝错误结构；现有样例迁移到 `local-assets/public/dog-wolf-friendship/`；测试、构建和文档同步完成。
 
 ## 2. 当前事实
 
-- 当前工作区有未提交的播放增强改动。
-- `pages/materials/materials.ts` 和 `pages/practice/player.ts` 已经通过播放器服务调用播放、暂停、从头、拖动和倍速。
-- 页面没有直接创建 `InnerAudioContext`。
-- `audioPlayer.ts` 已改成稳定实例模型：同一音频上的暂停、继续、倍速、拖动和从头播放都操作同一个 `InnerAudioContext`。
-- `audioPlayer.ts` 只在切换音频或页面调用 `stopListeningAudio()` 时销毁活动实例。
-- 当前完整验证命令是 `npm.cmd run verify` 和 `npm.cmd run build`。
+- 当前 `scripts/generate-local-assets.js` 只扫描 `local-assets/<material-id>/`。
+- 当前 `scripts/check-local-assets.js` 只允许 `local-assets` 根目录直接出现材料文件夹。
+- 当前 `local-assets` 只有 `dog-wolf-friendship` 一个样例材料。
+- 当前生成的 `cloudFileId` 是 `/local-assets/<material-id>/audio.<format>`。
+- 当前 `metadata.json` 写入 `libraryId/public-library`、`libraryName/公共资源`、`libraryKind/general`。
+- 当前 `spec.md`、项目 skill 写的是 `local-assets/<folder-id>/` 结构。
+- 当前完整验证命令是 `npm.cmd run verify`，构建命令是 `npm.cmd run build`。
 
 ## 3. 失败测试
 
 以下任一情况视为失败：
 
-- 同一条音频暂停、继续、倍速或拖动进度时销毁 `InnerAudioContext`。
-- 播放中切换倍速时没有保留当前播放位置。
-- 暂停状态切换倍速后自动播放。
-- 暂停状态切换倍速后再次播放没有从暂停位置继续。
-- 拖动进度总是强制播放，不能保留拖动前的暂停状态。
-- 从头播放不能稳定从 0 秒开始。
-- 切换到另一条音频时没有释放旧实例。
-- 页面直接访问 `InnerAudioContext`。
-- 为解决问题新增假接口、空实现、旧参数兼容或页面层魔法分支。
+- `local-assets` 根目录继续直接放材料文件夹。
+- 构建脚本把 `public`、`uncategorized` 或 `user` 错当成材料。
+- 同名材料跨分区后生成重复 ID 或路径冲突。
+- 生成的本地音频路径仍指向旧的 `/local-assets/dog-wolf-friendship/audio.mp3`。
+- 校验脚本允许未知顶层分区或错误文件层级。
+- 公共资源、未分类材料、用户材料的 `libraryId/libraryName/libraryKind` 推导不稳定。
+- 文档仍写旧的单层结构为当前事实。
 - `npm.cmd run verify` 或 `npm.cmd run build` 失败。
 
 ## 4. 目标
 
-- `audioPlayer.ts` 以当前音频实例为生命周期边界。
-- 当前音频不变时，`toggleListeningAudio`、`restartListeningAudio`、`seekListeningAudio`、`updateActivePlaybackRate` 都操作同一个 `InnerAudioContext`。
-- `updateActivePlaybackRate` 不销毁实例；播放中改倍速时记录位置、设置倍速、seek 回当前位置并继续播放；暂停中改倍速时只更新倍速并保留暂停位置。
-- `seekListeningAudio` 支持按调用前状态决定是否继续播放，避免暂停拖动后被强制播放。
-- 切换音频、页面停止和释放资源时才销毁实例。
-- 补充测试覆盖稳定实例模型。
-- 保持页面调用边界不变，页面仍只调用播放器服务。
+- 顶层分区固定为 `public`、`uncategorized`、`user`。
+- 材料目录固定为 `local-assets/<section>/<material-id>/`。
+- 生成材料 ID 使用 `<section>-<material-id>`，保证跨分区唯一。
+- 默认分类由顶层分区推导：
+  - `public` -> `public-library` / `公共资源` / `general`。
+  - `uncategorized` -> `uncategorized-library` / `未分类材料` / `user`。
+  - `user` -> `user-library` / `用户资源` / `user`。
+- `metadata.json` 只允许覆盖 `libraryId/libraryName/libraryKind`，但公共样例默认不需要它。
+- 样例 `dog-wolf-friendship` 移到 `local-assets/public/dog-wolf-friendship/`。
+- 生成路径改为 `/local-assets/public/dog-wolf-friendship/audio.mp3`。
+- 文档、skill、测试同步当前事实。
 
 ## 5. 不做范围
 
-- 不新增播放功能。
-- 不重做 UI。
-- 不改循环和自动下一条规则。
-- 不改播放设置缓存结构。
-- 不改云端数据。
-- 不提交或 push；commit/push 必须另行得到 owner 明确确认。
+- 不改小程序运行时用户新建材料的存储目录；`local-assets` 仍是仓库级样例目录。
+- 不做云端资源结构迁移。
+- 不做小程序内文件系统写回 `local-assets`。
+- 不保留旧单层目录兼容扫描。
+- 不新增 UI 功能。
+- 不 commit、不 push。
 
 ## 6. 设计
 
-播放器状态：
+主链路：
 
-- `stopped`：没有可继续的活动播放。
-- `playing`：当前音频正在播放。
-- `paused`：当前音频已暂停，并保留当前位置。
+```text
+local-assets/<section>/<material-id>/
+-> check-local-assets 校验分区、材料文件和重复 ID
+-> generate-local-assets 扫描分区
+-> 推导 title/library/audio/content
+-> 写 miniprogram/generated/localAssets.ts
+-> localDataStore 初始化本地材料、分类和音频
+-> build-miniprogram 复制 local-assets 到 dist/miniprogram/local-assets
+```
 
-生命周期边界：
+模块边界：
 
-- 创建实例：播放一条当前不存在的音频，或切换到另一条音频。
-- 销毁实例：切换到另一条音频、页面调用 `stopListeningAudio()`、明确释放资源。
-- 不销毁实例：暂停、继续、倍速、拖动、从头播放。
+- `scripts/generate-local-assets.js` 负责扫描和生成 TypeScript 数据。
+- `scripts/check-local-assets.js` 负责目录结构和文件约束。
+- `local-assets/` 只承载样例材料文件，不承载运行时用户数据。
+- `miniprogram/services/localDataStore.ts` 不直接读文件系统，只消费生成数据。
 
-服务层主链路：
+错误边界：
 
-- `ensureAudioSession(audio, hooks, playbackRate)`：如果当前实例不存在或音频不同，先释放旧实例，再创建并绑定当前音频；如果音频相同，只更新 hooks 和倍速。
-- `toggleListeningAudio`：播放中则暂停并记录位置；暂停中则设置倍速并从记录位置继续；停止或新音频则创建实例并播放。
-- `restartListeningAudio`：确保当前音频实例存在，`seek(0)` 后播放，不销毁同一音频实例。
-- `seekListeningAudio`：确保当前音频实例存在，`seek(position)`；如果进入前是播放中则继续播放，如果进入前是暂停中则保持暂停。
-- `updateActivePlaybackRate`：只更新当前实例倍速和服务状态；播放中为了让倍速立即生效，记录当前位置、设置倍速、`seek(position)`、`play()`；暂停中设置倍速和位置，不播放。
-- 事件回调用会话令牌隔离旧实例；只有当前实例事件能更新状态。
-
-测试边界：
-
-- 测试同一音频改倍速不销毁实例。
-- 测试暂停后改倍速不自动播放，再继续从暂停位置播放。
-- 测试从头播放同一音频不销毁实例。
-- 测试切换音频才销毁旧实例。
-- 测试暂停状态拖动进度不强制播放。
+- 未知顶层目录报错。
+- 顶层目录内出现非材料目录报错。
+- 材料目录内出现子目录报错。
+- 同一分区或跨分区生成相同材料 ID 报错。
+- 一个材料目录中多个音频文件报错。
+- 缺 `text.txt` 报错。
 
 ## 7. 实施任务
 
-- [x] T001 改造播放器服务为稳定实例模型；验收：同一音频控制操作不销毁实例。
-- [x] T002 补充和修正播放器测试；验收：测试覆盖倍速、暂停、拖动、从头、切换音频的生命周期边界。
-- [x] T003 检查页面接线；验收：页面仍只调用播放器服务，不直接访问 `InnerAudioContext`。
-- [x] T004 运行验证和构建；验收：`npm.cmd run verify`、`npm.cmd run build` 通过。
-- [x] T005 收口记录；验收：`plan.md` 写明完成事实、验证结果和剩余风险。
+- [x] T001 完成当前结构和引用调查。
+- [x] T002 更新 `plan.md` 为分区存储执行合同。
+- [x] T003 重写生成脚本支持 `public/uncategorized/user` 三分区扫描。
+- [x] T004 重写校验脚本支持三分区结构和错误结构拒绝。
+- [x] T005 迁移 `dog-wolf-friendship` 到 `local-assets/public/`，删除旧单层目录。
+- [x] T006 更新生成文件和相关测试期望。
+- [x] T007 同步 `spec.md`、README 和项目 skill 的 `local-assets` 当前事实。
+- [x] T008 运行 `npm.cmd run verify` 和 `npm.cmd run build`。
+- [x] T009 收口记录完成事实、验证结果和剩余风险。
 
 ## 8. 验证计划
 
@@ -101,9 +116,10 @@ npm.cmd run build
 
 检查：
 
-- `audioPlayer` 测试覆盖稳定实例模型。
-- 搜索确认页面没有直接访问 `InnerAudioContext` 或 `wx.createInnerAudioContext()`。
-- 构建产物生成到 `dist/miniprogram`。
+- `miniprogram/generated/localAssets.ts` 指向 `/local-assets/public/dog-wolf-friendship/audio.mp3`。
+- `dist/miniprogram/local-assets/public/dog-wolf-friendship/audio.mp3` 存在。
+- `scripts/check-local-assets.js` 不允许根目录直接放材料。
+- 文档不再把旧单层结构写成当前事实。
 
 ## 9. 收口
 
@@ -111,25 +127,30 @@ npm.cmd run build
 
 完成事实：
 
-- `audioPlayer.ts` 已改为稳定实例模型。
-- 同一条音频上暂停、继续、倍速、拖动进度和从头播放都不销毁 `InnerAudioContext`。
-- `updateActivePlaybackRate` 不再重建实例；播放中会记录当前位置、设置倍速、`seek(position)` 并继续播放；暂停中只更新倍速和保留位置，不自动播放。
-- `seekListeningAudio` 会保留调用前状态：播放中拖动后继续播放，暂停中拖动后保持暂停。
-- `restartListeningAudio` 对同一音频只 `seek(0)` 并播放，不销毁实例。
-- 切换到另一条音频或页面调用 `stopListeningAudio()` 时才释放旧实例。
-- 事件回调仍用会话令牌隔离旧实例，旧实例事件不能污染当前状态。
-- 页面仍只调用播放器服务，没有直接创建或操作 `InnerAudioContext`。
-- `tests/services/audioPlayer.test.ts` 已覆盖稳定实例生命周期：倍速、暂停、拖动、从头、切换音频和停止释放。
+- `local-assets/` 已改为 `public/`、`uncategorized/`、`user/` 三个顶层分区。
+- 样例材料已迁移到 `local-assets/public/dog-wolf-friendship/`。
+- 旧的 `local-assets/dog-wolf-friendship/` 单层材料目录已移除。
+- `scripts/generate-local-assets.js` 只扫描三分区结构，生成材料 ID 为 `<section>-<folder-id>`。
+- `scripts/check-local-assets.js` 会拒绝未知顶层目录、旧单层材料目录、错误文件层级、缺少 `text.txt` 和多个音频文件。
+- `miniprogram/generated/localAssets.ts` 已生成新路径：`/local-assets/public/dog-wolf-friendship/audio.mp3`。
+- 新增脚本测试覆盖三分区扫描和旧单层结构拒绝。
+- `spec.md` 和项目 skill 已同步当前 `local-assets/<section>/<folder-id>/` 事实。
+- 构建产物已复制到 `dist/miniprogram/local-assets/public/dog-wolf-friendship/audio.mp3`。
 
 验证结果：
 
-- `npm.cmd run typecheck` 通过。
-- `npm.cmd test` 通过，60 个测试全部通过。
-- `npm.cmd run verify` 通过。
-- `npm.cmd run build` 通过，构建产物生成到 `dist/miniprogram`。
-- 搜索确认：`wx.createInnerAudioContext()` 只在播放器服务和测试中出现；页面没有直接访问 `InnerAudioContext`。
+```powershell
+npm.cmd run verify
+npm.cmd run build
+```
+
+全部通过。`npm.cmd run verify` 中 62 个测试通过，边界检查和 local-assets 校验通过。
+
+未验证内容：
+
+- 未在微信开发者工具或真机中人工打开材料播放。
 
 剩余风险：
 
-- 未在微信开发者工具或真机里人工点击验证；真实设备上建议按“播放中改倍速、暂停后改倍速再继续、暂停后拖动、切换下一条”四条路径点一遍。
+- 这次明确切断旧单层 `local-assets/<material-id>/` 结构；后续新增样例必须放到 `public`、`uncategorized` 或 `user` 分区下。
 - 本次没有 commit 或 push；按 `AGENTS.md` 规则，commit/push 前必须由 owner 再次明确确认。
