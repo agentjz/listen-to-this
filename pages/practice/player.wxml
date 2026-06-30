@@ -35,6 +35,12 @@
       </view>
     </view>
 
+    <view class="playback-settings">
+      <view class="setting-chip" bindtap="cyclePlaybackRate">倍速 {{playbackRateText}}</view>
+      <view class="{{playbackSettings.singleLoopEnabled ? 'setting-chip active' : 'setting-chip'}}" bindtap="toggleSingleLoop">单条循环</view>
+      <view class="{{playbackSettings.autoPlayNextEnabled ? 'setting-chip active' : 'setting-chip'}}" bindtap="toggleAutoPlayNext">自动下一条</view>
+    </view>
+
     <view class="progress-row">
       <text class="time-text">{{currentTimeText}}</text>
       <slider

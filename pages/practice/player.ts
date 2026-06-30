@@ -6,11 +6,14 @@ import {
   getCurrentPracticeMaterial
 } from '../../miniprogram/lib/practice';
 import { formatPlaybackTime } from '../../miniprogram/lib/materialListView';
-import { AudioProgressState, restartListeningAudio, seekListeningAudio, stopListeningAudio, toggleListeningAudio } from '../../miniprogram/services/audioPlayer';
+import { AudioProgressState, restartListeningAudio, seekListeningAudio, stopListeningAudio, toggleListeningAudio, updateActivePlaybackRate } from '../../miniprogram/services/audioPlayer';
 import { getPracticeGroup } from '../../miniprogram/services/practiceGroups';
 import { loadSnapshotByMode } from '../../miniprogram/services/runtimeData';
+import { AUTO_PLAY_NEXT_DELAY_MS, resolvePlaybackEndAction } from '../../miniprogram/lib/playbackFlow';
+import { getNextPlaybackRate, readPlaybackSettings, updatePlaybackSettings } from '../../miniprogram/services/playbackSettings';
 import { PracticeGroup, PracticeMaterial, PracticeQueueState, PracticeSourceType } from '../../miniprogram/types/practice';
 import { DataMode, parseDataMode } from '../../miniprogram/types/runtime';
+import { PlaybackRate, PlaybackSettings } from '../../miniprogram/types/playback';
 
 interface PracticePlayerData {
   mode: DataMode;
@@ -31,6 +34,8 @@ interface PracticePlayerData {
   durationText: string;
   isSeeking: boolean;
   showContent: boolean;
+  playbackSettings: PlaybackSettings;
+  playbackRateText: string;
 }
 
 Page<PracticePlayerData, {
@@ -38,11 +43,18 @@ Page<PracticePlayerData, {
   togglePlay: () => void;
   restartCurrent: () => void;
   nextMaterial: () => void;
+  cyclePlaybackRate: () => void;
+  toggleSingleLoop: () => void;
+  toggleAutoPlayNext: () => void;
   toggleContent: () => void;
   onProgressChanging: (event: { detail: { value: number } }) => void;
   onProgressChanged: (event: { detail: { value: number } }) => void;
   updateProgress: (state: AudioProgressState) => void;
   resetProgress: () => void;
+  clearPendingAutoPlay: () => void;
+  playPracticeMaterial: (material: PracticeMaterial) => void;
+  handlePlaybackEnded: (materialId: string) => void;
+  updatePlaybackSettingsData: (settings: PlaybackSettings) => void;
   refreshCurrentMaterial: (queue: PracticeQueueState, materials?: PracticeMaterial[]) => void;
   formatTime: (seconds: number) => string;
   buildAudioHooks: (materialId: string) => {
@@ -72,7 +84,9 @@ Page<PracticePlayerData, {
     currentTimeText: '00:00',
     durationText: '00:00',
     isSeeking: false,
-    showContent: false
+    showContent: false,
+    playbackSettings: readPlaybackSettings(),
+    playbackRateText: '1x'
   },
 
   async onLoad(query) {
@@ -86,19 +100,23 @@ Page<PracticePlayerData, {
   },
 
   onHide() {
+    this.clearPendingAutoPlay();
     stopListeningAudio();
     this.resetProgress();
   },
 
   onUnload() {
+    this.clearPendingAutoPlay();
     stopListeningAudio();
     this.resetProgress();
   },
 
   async load() {
     try {
+      this.clearPendingAutoPlay();
       stopListeningAudio();
       this.resetProgress();
+      this.updatePlaybackSettingsData(readPlaybackSettings());
       const snapshot = await loadSnapshotByMode(this.data.mode);
       const allPracticeMaterials = buildPracticeMaterials({
         libraries: snapshot.data.libraries,
@@ -134,12 +152,15 @@ Page<PracticePlayerData, {
   },
 
   togglePlay() {
+    this.clearPendingAutoPlay();
     const material = this.data.currentMaterial;
     if (!material) {
       return;
     }
 
-    const result = toggleListeningAudio(material.audio, this.buildAudioHooks(material.id));
+    const result = toggleListeningAudio(material.audio, this.buildAudioHooks(material.id), {
+      playbackRate: this.data.playbackSettings.playbackRate
+    });
     if (result.state === 'playing') {
       this.setData({ playingMaterialId: material.id, pausedMaterialId: '' });
       return;
@@ -151,16 +172,20 @@ Page<PracticePlayerData, {
   },
 
   restartCurrent() {
+    this.clearPendingAutoPlay();
     const material = this.data.currentMaterial;
     if (!material) {
       return;
     }
 
-    restartListeningAudio(material.audio, this.buildAudioHooks(material.id));
+    restartListeningAudio(material.audio, this.buildAudioHooks(material.id), {
+      playbackRate: this.data.playbackSettings.playbackRate
+    });
     this.setData({ playingMaterialId: material.id, pausedMaterialId: '' });
   },
 
   nextMaterial() {
+    this.clearPendingAutoPlay();
     if (this.data.materials.length === 0) {
       return;
     }
@@ -170,6 +195,27 @@ Page<PracticePlayerData, {
     this.resetProgress();
     this.setData({ queue, showContent: false });
     this.refreshCurrentMaterial(queue);
+  },
+
+  cyclePlaybackRate() {
+    const playbackRate = getNextPlaybackRate(this.data.playbackSettings.playbackRate);
+    const settings = updatePlaybackSettings({ playbackRate });
+    this.updatePlaybackSettingsData(settings);
+    updateActivePlaybackRate(settings.playbackRate);
+  },
+
+  toggleSingleLoop() {
+    const settings = updatePlaybackSettings({
+      singleLoopEnabled: !this.data.playbackSettings.singleLoopEnabled
+    });
+    this.updatePlaybackSettingsData(settings);
+  },
+
+  toggleAutoPlayNext() {
+    const settings = updatePlaybackSettings({
+      autoPlayNextEnabled: !this.data.playbackSettings.autoPlayNextEnabled
+    });
+    this.updatePlaybackSettingsData(settings);
   },
 
   toggleContent() {
@@ -198,7 +244,10 @@ Page<PracticePlayerData, {
     const percent = Math.max(0, Math.min(100, event.detail.value));
     const duration = this.data.duration;
     const targetSeconds = duration > 0 ? (duration * percent) / 100 : 0;
-    seekListeningAudio(material.audio, targetSeconds, this.buildAudioHooks(material.id));
+    this.clearPendingAutoPlay();
+    seekListeningAudio(material.audio, targetSeconds, this.buildAudioHooks(material.id), {
+      playbackRate: this.data.playbackSettings.playbackRate
+    });
     this.setData({
       isSeeking: false,
       playingMaterialId: material.id,
@@ -233,6 +282,61 @@ Page<PracticePlayerData, {
     });
   },
 
+  clearPendingAutoPlay() {
+    const timerId = (this as unknown as { pendingAutoPlayTimer?: ReturnType<typeof setTimeout> }).pendingAutoPlayTimer;
+    if (timerId) {
+      clearTimeout(timerId);
+      (this as unknown as { pendingAutoPlayTimer?: ReturnType<typeof setTimeout> }).pendingAutoPlayTimer = undefined;
+    }
+  },
+
+  playPracticeMaterial(material) {
+    restartListeningAudio(material.audio, this.buildAudioHooks(material.id), {
+      playbackRate: this.data.playbackSettings.playbackRate
+    });
+    this.setData({ playingMaterialId: material.id, pausedMaterialId: '' });
+  },
+
+  handlePlaybackEnded(materialId) {
+    const material = this.data.currentMaterial?.id === materialId ? this.data.currentMaterial : null;
+    const action = resolvePlaybackEndAction({
+      settings: this.data.playbackSettings,
+      hasNextPlayable: this.data.materials.length > 1
+    });
+
+    this.resetProgress();
+
+    if (action === 'loop-current' && material) {
+      this.playPracticeMaterial(material);
+      return;
+    }
+
+    if (action === 'auto-next') {
+      this.clearPendingAutoPlay();
+      (this as unknown as { pendingAutoPlayTimer?: ReturnType<typeof setTimeout> }).pendingAutoPlayTimer = setTimeout(() => {
+        (this as unknown as { pendingAutoPlayTimer?: ReturnType<typeof setTimeout> }).pendingAutoPlayTimer = undefined;
+        const queue = advancePracticeQueue(this.data.queue, this.data.materials.map((item) => item.id));
+        const nextMaterial = getCurrentPracticeMaterial(this.data.materials, queue);
+        this.setData({ queue, showContent: false });
+        this.refreshCurrentMaterial(queue);
+        if (nextMaterial) {
+          this.playPracticeMaterial(nextMaterial);
+        }
+      }, AUTO_PLAY_NEXT_DELAY_MS);
+      wx.showToast({ title: '3 秒后播放下一条', icon: 'none' });
+      return;
+    }
+
+    wx.showToast({ title: '播放结束', icon: 'none' });
+  },
+
+  updatePlaybackSettingsData(settings) {
+    this.setData({
+      playbackSettings: settings,
+      playbackRateText: formatPlaybackRate(settings.playbackRate)
+    });
+  },
+
   refreshCurrentMaterial(queue, materials) {
     const sourceMaterials = materials ?? this.data.materials;
     const currentMaterial = getCurrentPracticeMaterial(sourceMaterials, queue);
@@ -247,10 +351,7 @@ Page<PracticePlayerData, {
   buildAudioHooks(materialId) {
     return {
       onError: (message: string) => wx.showToast({ title: message, icon: 'none' }),
-      onEnded: () => {
-        this.resetProgress();
-        wx.showToast({ title: '播放结束', icon: 'none' });
-      },
+      onEnded: () => this.handlePlaybackEnded(materialId),
       onPlay: () => this.setData({ playingMaterialId: materialId, pausedMaterialId: '' }),
       onPause: () => this.setData({ playingMaterialId: '', pausedMaterialId: materialId }),
       onTimeUpdate: (state: AudioProgressState) => this.updateProgress(state)
@@ -269,3 +370,7 @@ Page<PracticePlayerData, {
     return this.data.mode === 'local' ? '本地全部随机' : '云端全部随机';
   }
 });
+
+function formatPlaybackRate(rate: PlaybackRate): string {
+  return `${rate}x`;
+}

@@ -1,10 +1,18 @@
 ﻿import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { playListeningAudio, restartListeningAudio, seekListeningAudio, stopListeningAudio, toggleListeningAudio } from '../../miniprogram/services/audioPlayer';
+import {
+  playListeningAudio,
+  restartListeningAudio,
+  seekListeningAudio,
+  stopListeningAudio,
+  toggleListeningAudio,
+  updateActivePlaybackRate
+} from '../../miniprogram/services/audioPlayer';
 import { ListeningAudio } from '../../miniprogram/types/domain';
 
 interface MockAudioContext {
   src: string;
+  startTime: number;
   playbackRate: number;
   currentTime: number;
   duration: number;
@@ -37,10 +45,14 @@ function createMockContext(events: string[], options: { duration?: number; fireP
 
   const context: MockAudioContext & { emitTimeUpdate: () => void } = {
     src: '',
+    startTime: 0,
     playbackRate: 0,
     currentTime: 0,
     duration: options.duration ?? 0,
     play() {
+      if (this.currentTime === 0 && this.startTime > 0) {
+        this.currentTime = this.startTime;
+      }
       events.push(`play:${this.currentTime}`);
     },
     pause() {
@@ -100,10 +112,21 @@ test('playListeningAudio sets source and starts playback', () => {
 
   assert.equal(context.src, 'local-assets/example/audio-1.mp3');
   assert.equal(context.playbackRate, 1);
-  assert.deepEqual(events, ['play:0']);
+  assert.deepEqual(events, ['seek:0', 'play:0']);
   assert.equal(result.src, 'local-assets/example/audio-1.mp3');
   assert.equal(result.format, 'mp3');
   assert.equal(debugMessages.includes('player.event=play'), true);
+});
+
+test('playListeningAudio applies requested playback rate', () => {
+  const events: string[] = [];
+  const context = createMockContext(events);
+  installAudioContext(context);
+  stopListeningAudio();
+
+  playListeningAudio(createAudio('audio-rate'), {}, { playbackRate: 1.5 });
+
+  assert.equal(context.playbackRate, 1.5);
 });
 
 test('toggleListeningAudio pauses and resumes the active audio', () => {
@@ -115,35 +138,75 @@ test('toggleListeningAudio pauses and resumes the active audio', () => {
   assert.equal(toggleListeningAudio(audio).state, 'playing');
   assert.equal(toggleListeningAudio(audio).state, 'paused');
   assert.equal(toggleListeningAudio(audio).state, 'playing');
-  assert.deepEqual(events, ['play:0', 'pause', 'play:0']);
+  assert.deepEqual(events, ['seek:0', 'play:0', 'pause', 'seek:0', 'play:0']);
 });
 
-test('restartListeningAudio plays the active audio from the beginning', () => {
-  const firstEvents: string[] = [];
-  const secondEvents: string[] = [];
-  const firstContext = createMockContext(firstEvents, { duration: 100 });
-  const secondContext = createMockContext(secondEvents, { duration: 100 });
+test('toggleListeningAudio reapplies playback rate before resume', () => {
+  const events: string[] = [];
+  const context = createMockContext(events);
+  installAudioContext(context);
+  stopListeningAudio();
+  const audio = createAudio('audio-toggle-rate');
 
-  let createdCount = 0;
-  Object.assign(globalThis, {
-    wx: {
-      createInnerAudioContext() {
-        createdCount += 1;
-        return createdCount === 1 ? firstContext : secondContext;
-      }
-    } as unknown as typeof wx
-  });
+  toggleListeningAudio(audio, {}, { playbackRate: 0.75 });
+  toggleListeningAudio(audio, {}, { playbackRate: 0.75 });
+  toggleListeningAudio(audio, {}, { playbackRate: 1.25 });
+
+  assert.equal(context.playbackRate, 1.25);
+  assert.deepEqual(events, ['seek:0', 'play:0', 'pause', 'seek:0', 'play:0']);
+});
+
+test('updateActivePlaybackRate keeps the active playing context and applies rate at current position', () => {
+  const events: string[] = [];
+  const context = createMockContext(events, { duration: 100 });
+  installAudioContext(context);
+  stopListeningAudio();
+
+  playListeningAudio(createAudio('audio-live-rate'), {}, { playbackRate: 1 });
+  context.currentTime = 42;
+  updateActivePlaybackRate(1.5);
+
+  assert.equal(context.src, 'local-assets/example/audio-live-rate.mp3');
+  assert.equal(context.playbackRate, 1.5);
+  assert.deepEqual(events, ['seek:0', 'play:0', 'seek:42', 'play:42']);
+});
+
+test('updateActivePlaybackRate keeps the paused context without resuming and preserves position', () => {
+  const events: string[] = [];
+  const context = createMockContext(events, { duration: 100 });
+  installAudioContext(context);
+  stopListeningAudio();
+  const audio = createAudio('audio-paused-rate');
+
+  toggleListeningAudio(audio, {}, { playbackRate: 1 });
+  context.currentTime = 18;
+  toggleListeningAudio(audio, {}, { playbackRate: 1 });
+  updateActivePlaybackRate(1.25);
+
+  assert.equal(context.src, 'local-assets/example/audio-paused-rate.mp3');
+  assert.equal(context.playbackRate, 1.25);
+  assert.deepEqual(events, ['seek:0', 'play:0', 'pause']);
+
+  toggleListeningAudio(audio);
+
+  assert.deepEqual(events, ['seek:0', 'play:0', 'pause', 'seek:18', 'play:18']);
+});
+
+test('restartListeningAudio keeps the same context for the same audio and plays from the beginning', () => {
+  const events: string[] = [];
+  const context = createMockContext(events, { duration: 100 });
+  installAudioContext(context);
   stopListeningAudio();
 
   const audio = createAudio('audio-restart');
   playListeningAudio(audio);
-  firstContext.currentTime = 35;
-  const result = restartListeningAudio(audio);
+  context.currentTime = 35;
+  const result = restartListeningAudio(audio, {}, { playbackRate: 1.25 });
 
-  assert.equal(secondContext.currentTime, 0);
+  assert.equal(context.currentTime, 0);
+  assert.equal(context.playbackRate, 1.25);
   assert.equal(result.state, 'playing');
-  assert.deepEqual(firstEvents, ['play:0', 'stop', 'destroy']);
-  assert.deepEqual(secondEvents, ['play:0']);
+  assert.deepEqual(events, ['seek:0', 'play:0', 'seek:0', 'play:0']);
 });
 
 test('playListeningAudio emits progress on time update', () => {
@@ -172,14 +235,32 @@ test('seekListeningAudio jumps and keeps playback active', () => {
   const audio = createAudio('audio-seek');
 
   playListeningAudio(audio);
-  const result = seekListeningAudio(audio, 45);
+  const result = seekListeningAudio(audio, 45, {}, { playbackRate: 1.5 });
 
   assert.equal(context.currentTime, 45);
+  assert.equal(context.playbackRate, 1.5);
   assert.equal(result.state, 'playing');
-  assert.deepEqual(events, ['play:0', 'seek:45', 'play:45']);
+  assert.deepEqual(events, ['seek:0', 'play:0', 'seek:45', 'play:45']);
 });
 
-test('playListeningAudio starts a new session for the same audio', () => {
+test('seekListeningAudio keeps paused state when seeking the paused active audio', () => {
+  const events: string[] = [];
+  const context = createMockContext(events, { duration: 100 });
+  installAudioContext(context);
+  stopListeningAudio();
+  const audio = createAudio('audio-paused-seek');
+
+  toggleListeningAudio(audio);
+  context.currentTime = 20;
+  toggleListeningAudio(audio);
+  const result = seekListeningAudio(audio, 55);
+
+  assert.equal(context.currentTime, 55);
+  assert.equal(result.state, 'paused');
+  assert.deepEqual(events, ['seek:0', 'play:0', 'pause', 'seek:55']);
+});
+
+test('playListeningAudio releases the old context when switching audio', () => {
   const firstEvents: string[] = [];
   const secondEvents: string[] = [];
   const firstContext = createMockContext(firstEvents, { duration: 100 });
@@ -196,14 +277,13 @@ test('playListeningAudio starts a new session for the same audio', () => {
   });
   stopListeningAudio();
 
-  const audio = createAudio('audio-new-session');
-  playListeningAudio(audio);
+  playListeningAudio(createAudio('audio-old-session'));
   firstContext.currentTime = 60;
-  playListeningAudio(audio);
+  playListeningAudio(createAudio('audio-new-session'));
 
   assert.equal(secondContext.currentTime, 0);
-  assert.deepEqual(firstEvents, ['play:0', 'stop', 'destroy']);
-  assert.deepEqual(secondEvents, ['play:0']);
+  assert.deepEqual(firstEvents, ['seek:0', 'play:0', 'stop', 'destroy']);
+  assert.deepEqual(secondEvents, ['seek:0', 'play:0']);
 });
 
 test('stopListeningAudio destroys the active context and clears playback state', () => {
@@ -228,6 +308,6 @@ test('stopListeningAudio destroys the active context and clears playback state',
   stopListeningAudio();
   toggleListeningAudio(audio);
 
-  assert.deepEqual(firstEvents, ['play:0', 'stop', 'destroy']);
-  assert.deepEqual(secondEvents, ['play:0']);
+  assert.deepEqual(firstEvents, ['seek:0', 'play:0', 'stop', 'destroy']);
+  assert.deepEqual(secondEvents, ['seek:0', 'play:0']);
 });

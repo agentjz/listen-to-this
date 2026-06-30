@@ -1,4 +1,5 @@
 import { ListeningAudio } from '../types/domain';
+import { PlaybackRate } from '../types/playback';
 
 export interface AudioPlayerHooks {
   onDebug?: (message: string) => void;
@@ -17,6 +18,10 @@ export interface PlayListeningAudioResult {
 
 export type AudioPlaybackState = 'playing' | 'paused' | 'stopped';
 
+export interface AudioPlaybackOptions {
+  playbackRate?: PlaybackRate;
+}
+
 export interface AudioProgressState {
   currentTime: number;
   duration: number;
@@ -24,74 +29,209 @@ export interface AudioProgressState {
 }
 
 let activeAudioContext: WechatMiniprogram.InnerAudioContext | null = null;
+let activeAudio: ListeningAudio | null = null;
+let activeHooks: AudioPlayerHooks = {};
 let activeAudioId = '';
 let activePlaybackState: AudioPlaybackState = 'stopped';
+let activePlaybackRate: PlaybackRate = 1;
+let activePositionSeconds = 0;
+let activeSessionToken = 0;
 
-export function toggleListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHooks = {}): PlayListeningAudioResult {
+export function toggleListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHooks = {}, options: AudioPlaybackOptions = {}): PlayListeningAudioResult {
   if (activeAudioContext && activeAudioId === audio.id && activePlaybackState === 'playing') {
-    activeAudioContext.pause();
-    activePlaybackState = 'paused';
-    debug('player.command=pause', hooks);
-    hooks.onPause?.();
-    return {
-      src: audio.cloudFileId,
-      format: audio.format,
-      state: activePlaybackState
-    };
+    pauseActiveAudio(hooks);
+    return buildResult(audio);
   }
 
-  if (activeAudioContext && activeAudioId === audio.id && activePlaybackState === 'paused') {
-    activeAudioContext.play();
+  const context = ensureAudioSession(audio, hooks, options.playbackRate ?? activePlaybackRate);
+  activePlaybackRate = options.playbackRate ?? activePlaybackRate;
+  activeHooks = hooks;
+
+  if (activePlaybackState === 'paused') {
+    context.playbackRate = activePlaybackRate;
+    context.seek(activePositionSeconds);
+    context.play();
     activePlaybackState = 'playing';
-    debug('player.command=resume', hooks);
+    debug(`player.command=resume position=${activePositionSeconds}`, hooks);
     hooks.onPlay?.();
-    return {
-      src: audio.cloudFileId,
-      format: audio.format,
-      state: activePlaybackState
-    };
+    return buildResult(audio);
   }
 
-  return playListeningAudio(audio, hooks);
+  activePositionSeconds = 0;
+  context.playbackRate = activePlaybackRate;
+  context.seek(0);
+  context.play();
+  activePlaybackState = 'playing';
+  debug('player.command=play', hooks);
+  return buildResult(audio);
 }
 
-export function playListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHooks = {}): PlayListeningAudioResult {
-  stopListeningAudio(hooks);
-
-  const context = wx.createInnerAudioContext();
-  activeAudioContext = context;
-  activeAudioId = audio.id;
+export function playListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHooks = {}, options: AudioPlaybackOptions = {}): PlayListeningAudioResult {
+  const context = ensureAudioSession(audio, hooks, options.playbackRate ?? 1);
+  activePlaybackRate = options.playbackRate ?? 1;
+  activePositionSeconds = 0;
+  context.playbackRate = activePlaybackRate;
+  context.seek(0);
+  context.play();
   activePlaybackState = 'playing';
+  debug('player.command=play', hooks);
+  return buildResult(audio);
+}
+
+export function restartListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHooks = {}, options: AudioPlaybackOptions = {}): PlayListeningAudioResult {
+  const context = ensureAudioSession(audio, hooks, options.playbackRate ?? activePlaybackRate);
+  activePlaybackRate = options.playbackRate ?? activePlaybackRate;
+  activePositionSeconds = 0;
+  context.playbackRate = activePlaybackRate;
+  context.seek(0);
+  context.play();
+  activePlaybackState = 'playing';
+  debug('player.command=restart position=0', hooks);
+  hooks.onPlay?.();
+  return buildResult(audio);
+}
+
+export function stopListeningAudio(hooks: AudioPlayerHooks = {}): void {
+  if (!activeAudioContext) {
+    clearActiveAudioState();
+    return;
+  }
+
+  activeSessionToken += 1;
+  activeAudioContext.stop();
+  activeAudioContext.destroy();
+  activeAudioContext = null;
+  clearActiveAudioState();
+  debug('player.command=stop', hooks);
+}
+
+export function seekListeningAudio(audio: ListeningAudio, positionSeconds: number, hooks: AudioPlayerHooks = {}, options: AudioPlaybackOptions = {}): PlayListeningAudioResult {
+  const previousState = activeAudioContext && activeAudioId === audio.id ? activePlaybackState : 'stopped';
+  const targetPosition = normalizeTime(positionSeconds);
+  const context = ensureAudioSession(audio, hooks, options.playbackRate ?? activePlaybackRate);
+
+  activePlaybackRate = options.playbackRate ?? activePlaybackRate;
+  activePositionSeconds = targetPosition;
+  context.playbackRate = activePlaybackRate;
+  context.seek(targetPosition);
+  debug(`player.command=seek position=${targetPosition}`, hooks);
+
+  if (previousState === 'playing' || previousState === 'stopped') {
+    context.play();
+    activePlaybackState = 'playing';
+    hooks.onPlay?.();
+  } else {
+    activePlaybackState = 'paused';
+  }
+
+  return buildResult(audio);
+}
+
+export function updateActivePlaybackRate(playbackRate: PlaybackRate): void {
+  activePlaybackRate = playbackRate;
+
+  if (!activeAudioContext || !activeAudio) {
+    return;
+  }
+
+  activeAudioContext.playbackRate = playbackRate;
+
+  if (activePlaybackState === 'playing') {
+    activePositionSeconds = readActivePosition();
+    activeAudioContext.seek(activePositionSeconds);
+    activeAudioContext.play();
+    debug(`player.command=rate position=${activePositionSeconds} rate=${playbackRate}`, activeHooks);
+    return;
+  }
+
+  if (activePlaybackState === 'paused') {
+    activePositionSeconds = readActivePosition();
+    debug(`player.command=rate-paused position=${activePositionSeconds} rate=${playbackRate}`, activeHooks);
+  }
+}
+
+function ensureAudioSession(audio: ListeningAudio, hooks: AudioPlayerHooks, playbackRate: PlaybackRate): WechatMiniprogram.InnerAudioContext {
+  if (activeAudioContext && activeAudioId === audio.id) {
+    activeAudio = audio;
+    activeHooks = hooks;
+    activePlaybackRate = playbackRate;
+    activeAudioContext.playbackRate = playbackRate;
+    return activeAudioContext;
+  }
+
+  releaseActiveAudio(hooks);
+  return createAudioSession(audio, hooks, playbackRate);
+}
+
+function createAudioSession(audio: ListeningAudio, hooks: AudioPlayerHooks, playbackRate: PlaybackRate): WechatMiniprogram.InnerAudioContext {
+  const context = wx.createInnerAudioContext();
+  const sessionToken = activeSessionToken + 1;
+
+  activeSessionToken = sessionToken;
+  activeAudioContext = context;
+  activeAudio = audio;
+  activeHooks = hooks;
+  activeAudioId = audio.id;
+  activePlaybackState = 'stopped';
+  activePlaybackRate = playbackRate;
+  activePositionSeconds = 0;
+
   context.src = audio.cloudFileId;
-  context.playbackRate = 1;
+  context.startTime = 0;
+  context.playbackRate = playbackRate;
 
   debug(`audio.id=${audio.id}`, hooks);
   debug(`audio.src=${audio.cloudFileId}`, hooks);
   debug(`audio.format=${audio.format}`, hooks);
+  debug(`audio.playbackRate=${playbackRate}`, hooks);
 
   context.onPlay(() => {
+    if (!isActiveSession(sessionToken, context)) {
+      return;
+    }
+
     activePlaybackState = 'playing';
     debug('player.event=play', hooks);
     hooks.onPlay?.();
   });
 
   context.onPause(() => {
+    if (!isActiveSession(sessionToken, context)) {
+      return;
+    }
+
+    activePositionSeconds = readProgressState(context).currentTime;
     activePlaybackState = 'paused';
     debug('player.event=pause', hooks);
     hooks.onPause?.();
   });
 
   context.onTimeUpdate(() => {
-    hooks.onTimeUpdate?.(readProgressState(context));
+    if (!isActiveSession(sessionToken, context)) {
+      return;
+    }
+
+    const state = readProgressState(context);
+    activePositionSeconds = state.currentTime;
+    hooks.onTimeUpdate?.(state);
   });
 
   context.onEnded(() => {
+    if (!isActiveSession(sessionToken, context)) {
+      return;
+    }
+
     activePlaybackState = 'stopped';
+    activePositionSeconds = 0;
     debug('player.event=ended', hooks);
     hooks.onEnded?.();
   });
 
   context.onError((error) => {
+    if (!isActiveSession(sessionToken, context)) {
+      return;
+    }
+
     activePlaybackState = 'stopped';
     const message = error.errMsg || 'unknown audio error';
     console.error('[audioPlayer]', message);
@@ -99,52 +239,46 @@ export function playListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHook
     hooks.onError?.(message);
   });
 
-  context.play();
-  debug('player.command=play', hooks);
-
-  return {
-    src: audio.cloudFileId,
-    format: audio.format,
-    state: activePlaybackState
-  };
+  return context;
 }
 
-export function restartListeningAudio(audio: ListeningAudio, hooks: AudioPlayerHooks = {}): PlayListeningAudioResult {
-  stopListeningAudio(hooks);
-  const result = playListeningAudio(audio, hooks);
-  debug('player.command=restart', hooks);
-  return result;
-}
-
-export function stopListeningAudio(hooks: AudioPlayerHooks = {}): void {
+function pauseActiveAudio(hooks: AudioPlayerHooks): void {
   if (!activeAudioContext) {
-    activeAudioId = '';
-    activePlaybackState = 'stopped';
     return;
   }
 
+  activePositionSeconds = readActivePosition();
+  activeAudioContext.pause();
+  activePlaybackState = 'paused';
+  activeHooks = hooks;
+  debug(`player.command=pause position=${activePositionSeconds}`, hooks);
+  hooks.onPause?.();
+}
+
+function releaseActiveAudio(hooks: AudioPlayerHooks): void {
+  if (!activeAudioContext) {
+    clearActiveAudioState();
+    return;
+  }
+
+  activeSessionToken += 1;
   activeAudioContext.stop();
   activeAudioContext.destroy();
   activeAudioContext = null;
-  activeAudioId = '';
-  activePlaybackState = 'stopped';
-  debug('player.command=stop', hooks);
+  clearActiveAudioState();
+  debug('player.command=release', hooks);
 }
 
-export function seekListeningAudio(audio: ListeningAudio, positionSeconds: number, hooks: AudioPlayerHooks = {}): PlayListeningAudioResult {
-  if (!activeAudioContext || activeAudioId !== audio.id) {
-    const result = playListeningAudio(audio, hooks);
-    activeAudioContext?.seek(Math.max(0, positionSeconds));
-    debug(`player.command=seek position=${positionSeconds}`, hooks);
-    return result;
-  }
+function clearActiveAudioState(): void {
+  activeAudio = null;
+  activeHooks = {};
+  activeAudioId = '';
+  activePlaybackState = 'stopped';
+  activePlaybackRate = 1;
+  activePositionSeconds = 0;
+}
 
-  activeAudioContext.seek(Math.max(0, positionSeconds));
-  activeAudioContext.play();
-  activePlaybackState = 'playing';
-  debug(`player.command=seek position=${positionSeconds}`, hooks);
-  hooks.onPlay?.();
-
+function buildResult(audio: ListeningAudio): PlayListeningAudioResult {
   return {
     src: audio.cloudFileId,
     format: audio.format,
@@ -152,11 +286,32 @@ export function seekListeningAudio(audio: ListeningAudio, positionSeconds: numbe
   };
 }
 
+function isActiveSession(sessionToken: number, context: WechatMiniprogram.InnerAudioContext): boolean {
+  return activeSessionToken === sessionToken && activeAudioContext === context;
+}
+
+function readActivePosition(): number {
+  if (!activeAudioContext) {
+    return activePositionSeconds;
+  }
+
+  const contextTime = normalizeTime(activeAudioContext.currentTime);
+  if (contextTime === 0 && activePositionSeconds > 0) {
+    return activePositionSeconds;
+  }
+
+  return contextTime;
+}
+
 function readProgressState(context: WechatMiniprogram.InnerAudioContext): AudioProgressState {
-  const currentTime = Number.isFinite(context.currentTime) ? Math.max(0, context.currentTime) : 0;
-  const duration = Number.isFinite(context.duration) ? Math.max(0, context.duration) : 0;
+  const currentTime = normalizeTime(context.currentTime);
+  const duration = normalizeTime(context.duration);
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, Math.round((currentTime / duration) * 100))) : 0;
   return { currentTime, duration, progressPercent };
+}
+
+function normalizeTime(seconds: number): number {
+  return Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
 }
 
 function debug(message: string, hooks: AudioPlayerHooks): void {

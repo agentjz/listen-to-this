@@ -1,106 +1,94 @@
-# 首页双通道工作区 Plan
+# 播放器稳定实例生命周期 Plan
 
 ## 1. 需求文档
 
-当前首页直接摆出本地资源、本地新建、云端资源、云端新建和听写练习。开发阶段需要本地通道稳定测试，因为云端环境当前不可完整验证；未来正式使用时又需要云端通道成为主入口。
+当前材料页和听写练习页已经有播放、暂停、继续、从头播放、拖动进度、倍速、单条循环和自动下一条。实际体验仍有问题：暂停后再播放、播放中切换倍速、拖动进度等操作不应该让播放器进入不可预期状态。
 
-本次要把首页改成两个清晰入口：
+本次要把播放器生命周期改成稳定实例模型：当前音频不变时，播放器实例保持存在；暂停、继续、倍速和拖动进度都只是控制同一个实例；只有切换音频、从页面离开或明确停止释放资源时才销毁旧实例。
 
-- 测试入口：进入本地资源、本地新建、本地练习。
-- 云端入口：进入云端资源、云端新建、云端练习。
-
-用户打开首页时先选择工作区，再在工作区里选择资源、新建或练习。两个工作区的页面结构保持镜像，数据通道不同。本地通道用于无云环境测试，云端通道用于 CloudBase 接入后的真实数据路径。
-
-业务完成标准：首页只显示“测试入口”和“云端入口”；进入任一入口后，看到同构的三个操作入口；本地路径无需云环境可用，云端路径继续走云端接口且失败时明确提示。
+业务完成标准：用户在同一条音频上暂停、继续、改倍速、拖动进度和从头播放时，状态稳定、位置明确、不会因为销毁重建造成跳点或按钮错乱；切换到另一条音频时才释放旧实例并创建新实例。
 
 ## 2. 当前事实
 
-- 当前工作区干净，上一轮改动已提交并推送。
-- `pages/home/home.ts` 当前有本地资源、本地新建、云端资源、云端新建和一个不带 mode 的听写练习入口。
-- `pages/resources/resources.ts` 已支持 `mode=local|cloud`。
-- `pages/import/import.ts` 已支持 `mode=local|cloud`。
-- `pages/practice/categories.ts`、`pages/practice/groups.ts`、`pages/practice/player.ts` 已支持 `mode=local|cloud`。
-- `pages/practice/index.ts` 当前同时展示本地练习和云端练习，不是工作区内单通道页面。
-- `miniprogram/types/runtime.ts` 当前只有 `DataMode` 和 `parseDataMode`。
-- `spec.md` 当前验收标准仍写首页能直接进入本地资源、本地新建、云端资源、云端新建，没有记录首页工作区结构。
-- `app.json` 已包含练习相关页面。
-- `npm.cmd run verify` 和 `npm.cmd run build` 是当前完整验证命令。
+- 当前工作区有未提交的播放增强改动。
+- `pages/materials/materials.ts` 和 `pages/practice/player.ts` 已经通过播放器服务调用播放、暂停、从头、拖动和倍速。
+- 页面没有直接创建 `InnerAudioContext`。
+- `audioPlayer.ts` 已改成稳定实例模型：同一音频上的暂停、继续、倍速、拖动和从头播放都操作同一个 `InnerAudioContext`。
+- `audioPlayer.ts` 只在切换音频或页面调用 `stopListeningAudio()` 时销毁活动实例。
+- 当前完整验证命令是 `npm.cmd run verify` 和 `npm.cmd run build`。
 
 ## 3. 失败测试
 
 以下任一情况视为失败：
 
-- 首页仍直接显示本地资源、本地新建、云端资源、云端新建这四个一层入口。
-- 首页没有清晰区分测试入口和云端入口。
-- 工作区页没有提供资源、新建、练习三个镜像操作。
-- 本地工作区的练习入口没有携带 `mode=local`。
-- 云端工作区的练习入口没有携带 `mode=cloud`。
-- 为了正式切换入口而保留注释代码、假开关、旧入口别名或兼容转发。
-- 页面结构改变后出现按钮文字溢出、入口卡片挤压、图标缺失或整行用 `button` 当卡片。
-- `spec.md` 与当前首页用户路径不一致。
+- 同一条音频暂停、继续、倍速或拖动进度时销毁 `InnerAudioContext`。
+- 播放中切换倍速时没有保留当前播放位置。
+- 暂停状态切换倍速后自动播放。
+- 暂停状态切换倍速后再次播放没有从暂停位置继续。
+- 拖动进度总是强制播放，不能保留拖动前的暂停状态。
+- 从头播放不能稳定从 0 秒开始。
+- 切换到另一条音频时没有释放旧实例。
+- 页面直接访问 `InnerAudioContext`。
+- 为解决问题新增假接口、空实现、旧参数兼容或页面层魔法分支。
 - `npm.cmd run verify` 或 `npm.cmd run build` 失败。
 
 ## 4. 目标
 
-- 首页只呈现两个工作区入口：测试入口、云端入口。
-- 新增或改造工作区选择后的页面，使测试入口显示本地资源、本地新建、本地练习，云端入口显示云端资源、云端新建、云端练习。
-- 练习首页按传入 `mode` 只展示当前工作区的练习入口，不再在同一页混放本地和云端。
-- 新增小程序端工作区配置或纯规则，集中定义工作区名称、模式、图标和入口文案。
-- 补充测试保护工作区配置和练习入口路由规则。
-- 同步 `spec.md` 当前事实和验收标准。
+- `audioPlayer.ts` 以当前音频实例为生命周期边界。
+- 当前音频不变时，`toggleListeningAudio`、`restartListeningAudio`、`seekListeningAudio`、`updateActivePlaybackRate` 都操作同一个 `InnerAudioContext`。
+- `updateActivePlaybackRate` 不销毁实例；播放中改倍速时记录位置、设置倍速、seek 回当前位置并继续播放；暂停中改倍速时只更新倍速并保留暂停位置。
+- `seekListeningAudio` 支持按调用前状态决定是否继续播放，避免暂停拖动后被强制播放。
+- 切换音频、页面停止和释放资源时才销毁实例。
+- 补充测试覆盖稳定实例模型。
+- 保持页面调用边界不变，页面仍只调用播放器服务。
 
 ## 5. 不做范围
 
-- 不实现云端环境部署。
-- 不改变资源、新建、材料、练习播放器的数据读写行为。
-- 不删除本地通道。
-- 不通过注释代码切换正式入口。
-- 不新增复杂权限、登录、环境变量或远程配置开关。
-- 不提交或 push；commit/push 必须另行得到 owner 确认。
+- 不新增播放功能。
+- 不重做 UI。
+- 不改循环和自动下一条规则。
+- 不改播放设置缓存结构。
+- 不改云端数据。
+- 不提交或 push；commit/push 必须另行得到 owner 明确确认。
 
 ## 6. 设计
 
-主链路：
+播放器状态：
 
-1. 首页读取工作区配置，展示两个工作区入口。
-2. 用户点击测试入口，进入工作区页并携带 `mode=local`。
-3. 用户点击云端入口，进入工作区页并携带 `mode=cloud`。
-4. 工作区页根据 `mode` 展示三个操作：资源、新建、练习。
-5. 资源入口跳转 `/pages/resources/resources?mode=<mode>`。
-6. 新建入口跳转 `/pages/import/import?mode=<mode>`。
-7. 练习入口跳转 `/pages/practice/index?mode=<mode>`。
-8. 练习首页根据 `mode` 只展示当前通道的全部随机、分类随机、练习组三个入口。
+- `stopped`：没有可继续的活动播放。
+- `playing`：当前音频正在播放。
+- `paused`：当前音频已暂停，并保留当前位置。
 
-模块边界：
+生命周期边界：
 
-- `miniprogram/lib/workspaces.ts`：纯配置和路由构造规则，只描述当前有效工作区和入口，不保留隐藏旧入口。
-- `pages/home/*`：只展示工作区选择，不直接承载资源、新建、练习入口。
-- `pages/workspace/*`：展示单个工作区下的资源、新建、练习入口。
-- `pages/practice/index.*`：展示单个 mode 的练习入口。
-- `tests/domain/workspaces.test.ts`：验证工作区配置和路由生成。
-- `spec.md`：同步当前产品事实和验收标准。
+- 创建实例：播放一条当前不存在的音频，或切换到另一条音频。
+- 销毁实例：切换到另一条音频、页面调用 `stopListeningAudio()`、明确释放资源。
+- 不销毁实例：暂停、继续、倍速、拖动、从头播放。
 
-错误边界：
+服务层主链路：
 
-- `mode` 解析继续使用 `parseDataMode`，非法值回到 `local`。
-- 云端不可用时不在首页假装可用；云端资源、新建、练习进入后由现有云端加载逻辑显示失败原因。
+- `ensureAudioSession(audio, hooks, playbackRate)`：如果当前实例不存在或音频不同，先释放旧实例，再创建并绑定当前音频；如果音频相同，只更新 hooks 和倍速。
+- `toggleListeningAudio`：播放中则暂停并记录位置；暂停中则设置倍速并从记录位置继续；停止或新音频则创建实例并播放。
+- `restartListeningAudio`：确保当前音频实例存在，`seek(0)` 后播放，不销毁同一音频实例。
+- `seekListeningAudio`：确保当前音频实例存在，`seek(position)`；如果进入前是播放中则继续播放，如果进入前是暂停中则保持暂停。
+- `updateActivePlaybackRate`：只更新当前实例倍速和服务状态；播放中为了让倍速立即生效，记录当前位置、设置倍速、`seek(position)`、`play()`；暂停中设置倍速和位置，不播放。
+- 事件回调用会话令牌隔离旧实例；只有当前实例事件能更新状态。
 
-UI 边界：
+测试边界：
 
-- 入口卡片使用 `view bindtap`，不使用 `button` 当卡片。
-- 两层入口都使用稳定 grid/flex 尺寸，设置 `min-width: 0` 和换行策略。
-- 不加解释型长文案，不加伪统计。
+- 测试同一音频改倍速不销毁实例。
+- 测试暂停后改倍速不自动播放，再继续从暂停位置播放。
+- 测试从头播放同一音频不销毁实例。
+- 测试切换音频才销毁旧实例。
+- 测试暂停状态拖动进度不强制播放。
 
 ## 7. 实施任务
 
-- [x] T001 新增工作区纯规则模块；验收：能生成首页工作区配置和工作区内三个入口路由。
-- [x] T002 新增工作区规则测试；验收：测试覆盖两个工作区、三类入口和 mode 路由。
-- [x] T003 改造首页；验收：首页只显示测试入口和云端入口。
-- [x] T004 新增工作区页面并注册路由；验收：测试入口和云端入口分别显示资源、新建、练习。
-- [x] T005 改造练习首页为单 mode 页面；验收：`mode=local` 只显示本地练习，`mode=cloud` 只显示云端练习。
-- [x] T006 同步 `spec.md`；验收：产品事实和验收标准描述双通道工作区。
-- [x] T007 运行验证和构建；验收：`npm.cmd run verify`、`npm.cmd run build` 通过。
-- [x] T008 收口记录；验收：`plan.md` 写明完成事实、验证结果和剩余风险。
+- [x] T001 改造播放器服务为稳定实例模型；验收：同一音频控制操作不销毁实例。
+- [x] T002 补充和修正播放器测试；验收：测试覆盖倍速、暂停、拖动、从头、切换音频的生命周期边界。
+- [x] T003 检查页面接线；验收：页面仍只调用播放器服务，不直接访问 `InnerAudioContext`。
+- [x] T004 运行验证和构建；验收：`npm.cmd run verify`、`npm.cmd run build` 通过。
+- [x] T005 收口记录；验收：`plan.md` 写明完成事实、验证结果和剩余风险。
 
 ## 8. 验证计划
 
@@ -109,15 +97,12 @@ UI 边界：
 ```powershell
 npm.cmd run verify
 npm.cmd run build
-rg "<button|button\\b|::after|display:\\s*flex|grid-template-columns|width:\\s*100%" pages app.wxss -n
 ```
 
 检查：
 
-- 首页 WXML 中不再出现直接的本地资源、本地新建、云端资源、云端新建入口。
-- 首页 WXML 中存在测试入口和云端入口。
-- 工作区页面存在资源、新建、练习三个入口。
-- 练习首页路由带入 `mode` 并只渲染当前 mode 的入口。
+- `audioPlayer` 测试覆盖稳定实例模型。
+- 搜索确认页面没有直接访问 `InnerAudioContext` 或 `wx.createInnerAudioContext()`。
 - 构建产物生成到 `dist/miniprogram`。
 
 ## 9. 收口
@@ -126,22 +111,25 @@ rg "<button|button\\b|::after|display:\\s*flex|grid-template-columns|width:\\s*1
 
 完成事实：
 
-- 新增 `miniprogram/lib/workspaces.ts`，集中定义测试入口、云端入口和工作区内资源、新建、练习三个路由。
-- 新增 `tests/domain/workspaces.test.ts`，覆盖两个工作区、工作区页路由和本地/云端镜像操作入口。
-- 首页已改为只显示测试入口和云端入口。
-- 新增 `pages/workspace/workspace` 并注册到 `app.json`。
-- 工作区页根据 `mode=local|cloud` 展示资源、新建、练习三个入口。
-- 练习首页已改为单 mode 页面；`mode=local` 展示本地练习，`mode=cloud` 展示云端练习。
-- `spec.md` 已同步双通道工作区当前事实和验收标准。
+- `audioPlayer.ts` 已改为稳定实例模型。
+- 同一条音频上暂停、继续、倍速、拖动进度和从头播放都不销毁 `InnerAudioContext`。
+- `updateActivePlaybackRate` 不再重建实例；播放中会记录当前位置、设置倍速、`seek(position)` 并继续播放；暂停中只更新倍速和保留位置，不自动播放。
+- `seekListeningAudio` 会保留调用前状态：播放中拖动后继续播放，暂停中拖动后保持暂停。
+- `restartListeningAudio` 对同一音频只 `seek(0)` 并播放，不销毁实例。
+- 切换到另一条音频或页面调用 `stopListeningAudio()` 时才释放旧实例。
+- 事件回调仍用会话令牌隔离旧实例，旧实例事件不能污染当前状态。
+- 页面仍只调用播放器服务，没有直接创建或操作 `InnerAudioContext`。
+- `tests/services/audioPlayer.test.ts` 已覆盖稳定实例生命周期：倍速、暂停、拖动、从头、切换音频和停止释放。
 
 验证结果：
 
-- `npm.cmd run verify` 通过，48 个测试全部通过。
-- `npm.cmd run build` 通过，`dist/miniprogram` 已生成工作区页面产物。
-- UI 结构搜索已执行；入口卡片没有使用 `button`，`van-button` 仍只用于保存、新增、上传等真实命令。
-- 旧首页方法名搜索无残留：`goLocalResources`、`goCloudResources`、`goLocalCreate`、`goCloudCreate`、`startAllLocal`、`startAllCloud` 等均未命中。
+- `npm.cmd run typecheck` 通过。
+- `npm.cmd test` 通过，60 个测试全部通过。
+- `npm.cmd run verify` 通过。
+- `npm.cmd run build` 通过，构建产物生成到 `dist/miniprogram`。
+- 搜索确认：`wx.createInnerAudioContext()` 只在播放器服务和测试中出现；页面没有直接访问 `InnerAudioContext`。
 
 剩余风险：
 
-- 未在微信开发者工具里人工点击预览；需要打开构建后的项目确认两层入口视觉和跳转手感。
+- 未在微信开发者工具或真机里人工点击验证；真实设备上建议按“播放中改倍速、暂停后改倍速再继续、暂停后拖动、切换下一条”四条路径点一遍。
 - 本次没有 commit 或 push；按 `AGENTS.md` 规则，commit/push 前必须由 owner 再次明确确认。

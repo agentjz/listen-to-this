@@ -65,6 +65,36 @@
   border-top: 1rpx solid #eef1f7;
 }
 
+.playback-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  padding: 16rpx 18rpx;
+  border-top: 1rpx solid #eef1f7;
+  background: #ffffff;
+}
+
+.setting-chip {
+  min-width: 0;
+  height: 64rpx;
+  border: 1rpx solid #bae6fd;
+  border-radius: 8rpx;
+  color: #0284c7;
+  background: #ffffff;
+  font-size: 24rpx;
+  font-weight: 650;
+  line-height: 62rpx;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-chip.active {
+  color: #ffffff;
+  background: #38bdf8;
+}
+
 .progress-row {
   display: flex;
   min-height: 76rpx;

@@ -35,6 +35,7 @@ declare namespace WechatMiniprogram {
 
   interface InnerAudioContext {
     src: string;
+    startTime: number;
     playbackRate: number;
     currentTime: number;
     duration: number;
